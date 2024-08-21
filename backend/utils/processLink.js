@@ -1,6 +1,43 @@
 const axios = require('axios');
 const getStatusColor = require('./getStatusColor');
 
+
+const fetchStatusAndRedirect = async (url) => {
+  try {
+    const response = await axios.get(url, {
+      validateStatus: (status) => {
+        // Allow all status codes (even 3xx for redirects)
+        return true;
+      },
+    });
+
+    return {
+      statusCode: response.status,
+      redirectedUrl: response.request.res.responseUrl || url,
+    };
+  } catch (error) {
+    if (error.response) {
+      return {
+        statusCode: error.response.status,
+        redirectedUrl: error.response.request.res.responseUrl || url,
+      };
+    } else if (error.request) {
+      // Handle cases where no response is received (network issues, etc.)
+      return {
+        statusCode: 500,
+        redirectedUrl: url,
+      };
+    } else {
+      // Handle other types of errors
+      return {
+        statusCode: 500,
+        redirectedUrl: url,
+      };
+    }
+  }
+};
+
+module.exports = fetchStatusAndRedirect;
 const processLink = async (link, $) => {
   const href = $(link).attr('href');
   const text = $(link).text().trim();
@@ -32,20 +69,21 @@ const processLink = async (link, $) => {
 
   if (href) {
     try {
-      const response = await axios.get(href);
-      linkDetails.statusCode = response.status;
-      linkDetails.redirectedUrl = response.request.res.responseUrl;
-      linkDetails.statusColor = getStatusColor(response.status);
+      // Fetch status and redirected URL
+      const { statusCode, redirectedUrl } = await fetchStatusAndRedirect(href);
+      linkDetails.statusCode = statusCode;
+      linkDetails.redirectedUrl = redirectedUrl;
+      linkDetails.statusColor = getStatusColor(statusCode);
 
-      if (href !== linkDetails.redirectedUrl) {
+      // Check if redirection happened
+      if (href !== redirectedUrl) {
         linkDetails.originalUrlColor = 'blue';
         linkDetails.redirectedUrlColor = 'purple';
       }
     } catch (error) {
-      if (error.response) {
-        linkDetails.statusCode = error.response.status;
-        linkDetails.statusColor = getStatusColor(error.response.status);
-      }
+      // Handle unexpected errors
+      linkDetails.statusCode = 500;
+      linkDetails.statusColor = 'red'; // Error color
     }
   }
 

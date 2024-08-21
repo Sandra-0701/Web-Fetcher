@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
-import { Input, Select, Checkbox, Button, Table, message } from 'antd';
+import axios from 'axios';
+import { Table, Button, Input, Select, Checkbox, message } from 'antd';
 import * as XLSX from 'xlsx';
-import { fetchData } from './api';
-import LinkDetailsTable from './components/LinkDetailsTable';
-import ImageDetailsTable from './components/ImageDetailsTable';
-import VideoDetailsTable from './components/VideoDetailsTable';
-import PagePropertiesTable from './components/PagePropertiesTable';
-import HeadingHierarchyTable from './components/HeadingHierarchyTable';
-import ExtractLink from './components/ExtractLink';
+import './style.css'; 
 
 const { Option } = Select;
 
@@ -20,69 +15,61 @@ const App = () => {
   const [allDetails, setAllDetails] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const handleFetchData = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      console.log('Fetching data with:', { url, dataType, includeUhf });
-      const responseData = await fetchData(url, dataType, includeUhf);
-      console.log('Received data:', responseData);
+      const response = await axios.post(`http://localhost:5000/${dataType}`, {
+        url,
+        includeUhf,
+      });
+      const responseData = response.data;
 
-      if (dataType === 'all-details') {
-        setAllDetails({
-          links: responseData.links || [],
-          images: responseData.images || [],
-          videos: responseData.videos || [],
-          pageProperties: responseData.pageProperties || [],
-          headings: responseData.headings || [],
-        });
-      } else {
-        setData(responseData[dataType] || []);
-
-        let newColumns = [];
-        switch (dataType) {
-          case 'link-details':
-            newColumns = [
-              { title: 'Text', dataIndex: 'text', key: 'text' },
-              { title: 'Href', dataIndex: 'href', key: 'href' },
-              { title: 'Target', dataIndex: 'target', key: 'target' },
-            ];
-            break;
-          case 'image-details':
-            newColumns = [
-              { title: 'Src', dataIndex: 'src', key: 'src' },
-              { title: 'Alt', dataIndex: 'alt', key: 'alt' },
-            ];
-            break;
-          case 'video-details':
-            newColumns = [
-              { title: 'Src', dataIndex: 'src', key: 'src' },
-              { title: 'Type', dataIndex: 'type', key: 'type' },
-            ];
-            break;
-          case 'page-properties':
-            newColumns = [
-              { title: 'Property', dataIndex: 'property', key: 'property' },
-              { title: 'Value', dataIndex: 'value', key: 'value' },
-            ];
-            break;
-          case 'heading-hierarchy':
-            newColumns = [
-              { title: 'Level', dataIndex: 'level', key: 'level' },
-              { title: 'Text', dataIndex: 'text', key: 'text' },
-            ];
-            break;
-          case 'extract-urls':
-            newColumns = [
-              { title: 'URL', dataIndex: 'text', key: 'text' },
-            ];
-            break;
-          default:
-            newColumns = [];
-        }
-        setColumns(newColumns);
+      if (dataType === 'extract-urls') {
+        setColumns([{ title: 'URL', dataIndex: 'url', key: 'url' }]);
+        setData(responseData.urls?.map((url, index) => ({ key: index, url })) || []);
+      } else if (dataType === 'link-details') {
+        setColumns([
+          { title: 'Link Type', dataIndex: 'linkType', key: 'linkType' },
+          { title: 'Link Text', dataIndex: 'linkText', key: 'linkText', render: (text) => <div dangerouslySetInnerHTML={{ __html: text }} /> },
+          { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
+          { title: 'URL', dataIndex: 'url', key: 'url' },
+          { title: 'Redirected URL', dataIndex: 'redirectedUrl', key: 'redirectedUrl' },
+          { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode' },
+          { title: 'Target', dataIndex: 'target', key: 'target' },
+        ]);
+        setData(responseData.links?.map((link, index) => ({ key: index, ...link })) || []);
+      } else if (dataType === 'image-details') {
+        setColumns([
+          { title: 'Image Name', dataIndex: 'imageName', key: 'imageName' },
+          { title: 'Alt Text', dataIndex: 'alt', key: 'alt', render: (text) => <div dangerouslySetInnerHTML={{ __html: text }} /> },
+        ]);
+        setData(responseData.images?.filter(image => image.imageName).map((image, index) => ({ key: index, ...image })) || []);
+      } else if (dataType === 'video-details') {
+        setColumns([
+          { title: 'Transcript', dataIndex: 'transcript', key: 'transcript' },
+          { title: 'CC', dataIndex: 'cc', key: 'cc' },
+          { title: 'Autoplay', dataIndex: 'autoplay', key: 'autoplay' },
+          { title: 'Muted', dataIndex: 'muted', key: 'muted' },
+          { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
+          { title: 'Audio Track Present', dataIndex: 'audioTrack', key: 'audioTrack' },
+        ]);
+        setData(responseData.videos?.map((video, index) => ({ key: index, ...video })) || []);
+      } else if (dataType === 'page-properties') {
+        setColumns([
+          { title: 'Name', dataIndex: 'name', key: 'name' },
+          { title: 'Content', dataIndex: 'content', key: 'content' },
+        ]);
+        setData(responseData.metaTags?.map((meta, index) => ({ key: index, ...meta })) || []);
+      } else if (dataType === 'heading-hierarchy') {
+        setColumns([
+          { title: 'Level', dataIndex: 'level', key: 'level' },
+          { title: 'Text', dataIndex: 'text', key: 'text' },
+        ]);
+        setData(responseData.headings?.map((heading, index) => ({ key: index, ...heading })) || []);
+      } else if (dataType === 'all-details') {
+        setAllDetails(responseData);
       }
     } catch (error) {
-      console.error('Error in handleFetchData:', error);
       message.error('Failed to fetch data.');
     } finally {
       setLoading(false);
@@ -92,11 +79,11 @@ const App = () => {
   const handleDownloadExcel = () => {
     if (allDetails) {
       const sheetData = {
-        'Link Details': allDetails.links,
-        'Image Details': allDetails.images,
-        'Video Details': allDetails.videos,
-        'Page Properties': allDetails.pageProperties,
-        'Heading Details': allDetails.headings,
+        'Link Details': allDetails.links || [],
+        'Image Details': allDetails.images || [],
+        'Video Details': allDetails.videos || [],
+        'Page Properties': allDetails.pageProperties || [],
+        'Heading Details': allDetails.headings || [],
       };
 
       const workbook = XLSX.utils.book_new();
@@ -111,8 +98,10 @@ const App = () => {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Web Page Data Extractor</h1>
+    <div className="container">
+      <div className="header">
+        <h1>Web Page Fetcher</h1>
+      </div>
       <Input
         placeholder="Enter URL"
         value={url}
@@ -139,34 +128,88 @@ const App = () => {
       >
         Include UHF
       </Checkbox>
-      <Button onClick={handleFetchData} type="primary" style={{ marginBottom: 10 }} loading={loading}>
+      <Button
+        onClick={fetchData}
+        type="primary"
+        style={{ marginBottom: 10 }}
+        loading={loading}
+      >
         Fetch Data
       </Button>
-      <Button onClick={handleDownloadExcel} type="default" style={{ marginBottom: 20 }}>
+      <Button
+        onClick={handleDownloadExcel}
+        type="default"
+      >
         Download as Excel
       </Button>
 
-      {/* Conditionally render the tables based on the selected dataType */}
       {dataType === 'all-details' && allDetails && (
         <>
-          {allDetails.links && <LinkDetailsTable data={allDetails.links} />}
-          {allDetails.images && <ImageDetailsTable data={allDetails.images} />}
-          {allDetails.videos && <VideoDetailsTable data={allDetails.videos} />}
-          {allDetails.pageProperties && <PagePropertiesTable data={allDetails.pageProperties} />}
-          {allDetails.headings && <HeadingHierarchyTable data={allDetails.headings} />}
+          <h2>Link Details</h2>
+          <Table
+            dataSource={allDetails.links?.map((link, index) => ({ key: index, ...link })) || []}
+            columns={[
+              { title: 'Link Type', dataIndex: 'linkType', key: 'linkType' },
+              { title: 'Link Text', dataIndex: 'linkText', key: 'linkText', render: (text) => <div dangerouslySetInnerHTML={{ __html: text }} /> },
+              { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
+              { title: 'URL', dataIndex: 'url', key: 'url' },
+              { title: 'Redirected URL', dataIndex: 'redirectedUrl', key: 'redirectedUrl' },
+              { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode' },
+              { title: 'Target', dataIndex: 'target', key: 'target' },
+            ]}
+            pagination={false}
+            style={{ marginTop: 20 }}
+          />
+          <h2>Image Details</h2>
+          <Table
+            dataSource={allDetails.images?.map((image, index) => ({ key: index, ...image })) || []}
+            columns={[
+              { title: 'Image Name', dataIndex: 'imageName', key: 'imageName' },
+              { title: 'Alt Text', dataIndex: 'alt', key: 'alt', render: (text) => <div dangerouslySetInnerHTML={{ __html: text }} /> },
+            ]}
+            pagination={false}
+            style={{ marginTop: 20 }}
+          />
+          <h2>Video Details</h2>
+          <Table
+            dataSource={allDetails.videos?.map((video, index) => ({ key: index, ...video })) || []}
+            columns={[
+              { title: 'Transcript', dataIndex: 'transcript', key: 'transcript' },
+              { title: 'CC', dataIndex: 'cc', key: 'cc' },
+              { title: 'Autoplay', dataIndex: 'autoplay', key: 'autoplay' },
+              { title: 'Muted', dataIndex: 'muted', key: 'muted' },
+              { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
+              { title: 'Audio Track Present', dataIndex: 'audioTrack', key: 'audioTrack' },
+            ]}
+            pagination={false}
+            style={{ marginTop: 20 }}
+          />
+          <h2>Page Properties</h2>
+          <Table
+            dataSource={allDetails.pageProperties?.map((meta, index) => ({ key: index, ...meta })) || []}
+            columns={[
+              { title: 'Name', dataIndex: 'name', key: 'name' },
+              { title: 'Content', dataIndex: 'content', key: 'content' },
+            ]}
+            pagination={false}
+            style={{ marginTop: 20 }}
+          />
+          <h2>Heading Hierarchy</h2>
+          <Table
+            dataSource={allDetails.headings?.map((heading, index) => ({ key: index, ...heading })) || []}
+            columns={[
+              { title: 'Level', dataIndex: 'level', key: 'level' },
+              { title: 'Text', dataIndex: 'text', key: 'text' },
+            ]}
+            pagination={false}
+            style={{ marginTop: 20 }}
+          />
         </>
       )}
 
-      {dataType === 'extract-urls' && <ExtractLink data={data} />}
-      {dataType === 'link-details' && <LinkDetailsTable data={data} />}
-      {dataType === 'image-details' && <ImageDetailsTable data={data} />}
-      {dataType === 'video-details' && <VideoDetailsTable data={data} />}
-      {dataType === 'page-properties' && <PagePropertiesTable data={data} />}
-      {dataType === 'heading-hierarchy' && <HeadingHierarchyTable data={data} />}
-
       {dataType !== 'all-details' && (
         <Table
-          dataSource={data.map((item, index) => ({ key: index, ...item }))}
+          dataSource={data}
           columns={columns}
           pagination={false}
           loading={loading}
