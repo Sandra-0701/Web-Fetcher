@@ -5,7 +5,7 @@
         "src": "front/package.json",
         "use": "@vercel/static-build",
         "config": {
-          "distDir": "build"
+          "distDir": "build"  // Adjust this if your build directory is different
         }
       },
       {
