@@ -5,7 +5,7 @@
         "src": "front/package.json",
         "use": "@vercel/static-build",
         "config": {
-          "distDir": "build"  // Adjust this if your build directory is different
+          "distDir": "build"  
         }
       },
       {
@@ -15,7 +15,7 @@
     ],
     "routes": [
       {
-        "src": "/(.*)",
+        "src": "/api/(.*)",
         "dest": "backend/server.js"
       },
       {
