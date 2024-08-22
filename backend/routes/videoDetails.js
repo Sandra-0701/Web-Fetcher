@@ -8,13 +8,31 @@ router.post('/', async (req, res) => {
   const page = await browser.newPage();
   await page.goto(url);
 
-  const videoDetails = await page.evaluate(() => {
+  const videoDetails = await page.evaluate(async () => {
     const videoDetailsList = [];
     const videoElements = document.querySelectorAll("universal-media-player");
 
-    videoElements.forEach(videoElement => {
+    // Helper function to wait for the audio track button to be rendered
+    const waitForRender = (videoElement) => {
+      return new Promise((resolve) => {
+        const checkButton = () => {
+          const audioTrackButton = videoElement.querySelector('.vjs-audio-button.vjs-menu-button.vjs-menu-button-popup.vjs-button');
+          if (audioTrackButton) {
+            resolve(audioTrackButton);
+          } else {
+            requestAnimationFrame(checkButton);
+          }
+        };
+        checkButton();
+      });
+    };
+
+    for (const videoElement of videoElements) {
       const options = JSON.parse(videoElement.getAttribute("options"));
-      const audioTrackPresent = videoElement.querySelector('.vjs-main-desc-menu-item') ? "yes" : "no";
+
+      const audioTrackButton = await waitForRender(videoElement);
+      const audioTrackPresent = audioTrackButton && audioTrackButton.querySelector('span.vjs-control-text') ? "yes" : "no";
+
       const videoDetail = {
         transcript: options.downloadableFiles
           .filter(file => file.mediaType === "transcript")
@@ -27,7 +45,7 @@ router.post('/', async (req, res) => {
       };
 
       videoDetailsList.push(videoDetail);
-    });
+    }
 
     return videoDetailsList;
   });

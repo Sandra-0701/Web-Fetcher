@@ -3,16 +3,16 @@ const router = express.Router();
 const getPageContent = require('../utils/getPageContent');
 
 router.post('/', async (req, res) => {
-  const { url, includeUhf = false } = req.body; // Default to false if not provided
+  const { url } = req.body; // Remove includeUhf as it's no longer needed
   try {
-    const $ = await getPageContent(url, includeUhf);
-    if (!$) return res.status(500).send('Failed to fetch page content.');
+    const root = await getPageContent(url);
+    if (!root) return res.status(500).send('Failed to fetch page content.');
 
     const metaTags = [];
-    $('meta').each((_, meta) => {
-      const name = $(meta).attr('name');
-      const property = $(meta).attr('property');
-      const content = $(meta).attr('content');
+    root.querySelectorAll('meta').forEach(meta => {
+      const name = meta.getAttribute('name');
+      const property = meta.getAttribute('property');
+      const content = meta.getAttribute('content');
       if (name || property) {
         metaTags.push({
           name: name || property,

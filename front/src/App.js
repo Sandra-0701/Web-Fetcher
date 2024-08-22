@@ -2,9 +2,17 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Table, Button, Input, Select, Checkbox, message } from 'antd';
 import * as XLSX from 'xlsx';
-import './style.css'; 
+import './style.css';
 
 const { Option } = Select;
+
+// Define the function to get status color
+const getStatusColor = (statusCode) => {
+  if (statusCode >= 500) return 'red'; // Server errors
+  if (statusCode >= 400) return 'orange'; // Client errors
+  if (statusCode >= 300) return 'blue'; // Redirects
+  return 'green'; // Successful responses
+};
 
 const App = () => {
   const [url, setUrl] = useState('');
@@ -18,12 +26,13 @@ const App = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(`http://localhost:5000/${dataType}`, {
+      const response = await axios.post(`${process.env.REACT_APP_API_BASE_URL}/${dataType}`, {
         url,
         includeUhf,
       });
       const responseData = response.data;
 
+      // Set data and columns based on data type
       if (dataType === 'extract-urls') {
         setColumns([{ title: 'URL', dataIndex: 'url', key: 'url' }]);
         setData(responseData.urls?.map((url, index) => ({ key: index, url })) || []);
@@ -34,7 +43,7 @@ const App = () => {
           { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
           { title: 'URL', dataIndex: 'url', key: 'url' },
           { title: 'Redirected URL', dataIndex: 'redirectedUrl', key: 'redirectedUrl' },
-          { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode' },
+          { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode', render: (text, record) => <div style={{ color: getStatusColor(record.statusCode) }}>{text}</div> },
           { title: 'Target', dataIndex: 'target', key: 'target' },
         ]);
         setData(responseData.links?.map((link, index) => ({ key: index, ...link })) || []);
@@ -154,7 +163,7 @@ const App = () => {
               { title: 'ARIA Label', dataIndex: 'ariaLabel', key: 'ariaLabel' },
               { title: 'URL', dataIndex: 'url', key: 'url' },
               { title: 'Redirected URL', dataIndex: 'redirectedUrl', key: 'redirectedUrl' },
-              { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode' },
+              { title: 'Status Code', dataIndex: 'statusCode', key: 'statusCode', render: (text, record) => <div style={{ color: getStatusColor(record.statusCode) }}>{text}</div> },
               { title: 'Target', dataIndex: 'target', key: 'target' },
             ]}
             pagination={false}

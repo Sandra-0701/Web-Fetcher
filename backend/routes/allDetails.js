@@ -1,92 +1,97 @@
 const express = require('express');
+const puppeteer = require('puppeteer');
 const router = express.Router();
-const axios = require('axios');
-const cheerio = require('cheerio');
-const getStatusColor = require('../utils/getStatusColor'); 
-const processLink = require('../utils/processLink'); 
+const getPageContent = require('../utils/getPageContent');
+const processLink = require('../utils/processLink');
 
-const fetchLinkDetails = async ($) => {
-  const links = $('a[href]').toArray();
-  const linkDetails = await Promise.all(links.map(link => processLink(link, $)));
-  return linkDetails;
-};
+router.post('/', async (req, res) => {
+  const { url, includeUhf = false } = req.body; // Default to false if not provided
+  try {
+    // Fetch content with Cheerio for links, images, headings
+    const $ = await getPageContent(url, includeUhf);
+    if (!$) return res.status(500).send('Failed to fetch page content.');
 
-const fetchImageDetails = ($) => {
-  const images = $('img').toArray();
-  return images.map(img => ({
-    imageName: $(img).attr('src'),
-    alt: $(img).attr('alt') || ''
-  }));
-};
+    // Fetch link details
+    const linkElements = $('a').toArray();
+    const linkPromises = linkElements.map(link => processLink(link, $));
+    const links = await Promise.all(linkPromises);
 
-const fetchVideoDetails = ($) => {
-  const videos = $('video').toArray();
-  return videos.map(video => ({
-    transcript: $(video).attr('data-transcript') || '',
-    cc: $(video).attr('data-cc') || '',
-    autoplay: $(video).attr('autoplay') ? 'Yes' : 'No',
-    muted: $(video).attr('muted') ? 'Yes' : 'No',
-    ariaLabel: $(video).attr('aria-label') || '',
-    audioTrack: $(video).find('track').length > 0 ? 'Yes' : 'No'
-  }));
-};
+    // Fetch image details
+    const images = [];
+    $('img').each((_, element) => {
+      const src = $(element).attr('src');
+      if (src) {
+        const alt = $(element).attr('alt');
+        images.push({
+          imageName: src,
+          alt: alt || 'No Alt Text',
+          hasAlt: !!alt,
+        });
+      }
+    });
 
-const fetchPageProperties = ($) => {
-  const metaTags = $('meta').toArray();
-  return metaTags.map(meta => ({
-    name: $(meta).attr('name') || $(meta).attr('property'),
-    content: $(meta).attr('content') || ''
-  }));
-};
-
-const fetchHeadingHierarchy = ($) => {
-  const headings = [];
-  for (let i = 1; i <= 6; i++) {
-    $(`h${i}`).each((_, heading) => {
+    // Fetch headings
+    const headings = [];
+    $('h1, h2, h3, h4, h5, h6').each((_, heading) => {
       headings.push({
-        level: i,
-        text: $(heading).text().trim()
+        level: heading.tagName,
+        text: $(heading).text().trim(),
       });
     });
-  }
-  return headings;
-};
 
-// Function to get page content and parse it
-const getPageContent = async (url) => {
-  try {
-    const response = await axios.get(url);
-    return cheerio.load(response.data);
-  } catch (error) {
-    console.error('Failed to fetch page content:', error);
-    return null;
-  }
-};
+    // Fetch video details with Puppeteer
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(url);
 
-// Route to fetch all details
-router.post('/', async (req, res) => {
-  const { url } = req.body;
-  const $ = await getPageContent(url);
+    const videoDetails = await page.evaluate(async () => {
+      const videoDetailsList = [];
+      const videoElements = document.querySelectorAll("universal-media-player");
 
-  if (!$) return res.status(500).send('Failed to fetch page content.');
+      // Helper function to wait for the audio track button to be rendered
+      const waitForRender = (videoElement) => {
+        return new Promise((resolve) => {
+          const checkButton = () => {
+            const audioTrackButton = videoElement.querySelector('.vjs-audio-button.vjs-menu-button.vjs-menu-button-popup.vjs-button');
+            if (audioTrackButton) {
+              resolve(audioTrackButton);
+            } else {
+              requestAnimationFrame(checkButton);
+            }
+          };
+          checkButton();
+        });
+      };
 
-  try {
-    const [linkDetails, imageDetails, videoDetails, pageProperties, headingHierarchy] = await Promise.all([
-      fetchLinkDetails($),
-      fetchImageDetails($),
-      fetchVideoDetails($),
-      fetchPageProperties($),
-      fetchHeadingHierarchy($),
-    ]);
+      for (const videoElement of videoElements) {
+        const options = JSON.parse(videoElement.getAttribute("options"));
 
-    res.json({
-      links: linkDetails,
-      images: imageDetails,
-      videos: videoDetails,
-      pageProperties: pageProperties,
-      headings: headingHierarchy,
+        const audioTrackButton = await waitForRender(videoElement);
+        const audioTrackPresent = audioTrackButton && audioTrackButton.querySelector('span.vjs-control-text') ? "yes" : "no";
+
+        const videoDetail = {
+          transcript: options.downloadableFiles
+            .filter(file => file.mediaType === "transcript")
+            .map(file => file.locale),
+          cc: options.ccFiles.map(file => file.locale),
+          autoplay: options.autoplay ? "yes" : "no",
+          muted: options.muted ? "yes" : "no",
+          ariaLabel: options.ariaLabel || options.title || "",
+          audioTrack: audioTrackPresent,
+        };
+
+        videoDetailsList.push(videoDetail);
+      }
+
+      return videoDetailsList;
     });
+
+    await browser.close();
+
+    // Respond with all details including video details
+    res.json({ links, images, headings, videos: videoDetails });
   } catch (error) {
+    console.error('Error in /all-details route:', error.message);
     res.status(500).send('Failed to process page content.');
   }
 });
